@@ -49,7 +49,7 @@ const CounterComponent = ({ counter }: { counter: Observable<number> }) => {
   }, []);
 
   console.log(
-    'This component will be rendered as the button is pressed like',
+    'This component should be rendered as the button is pressed like',
     counter.value,
   );
 
