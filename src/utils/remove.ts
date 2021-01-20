@@ -6,7 +6,7 @@ const remove = <T>({ array, predicate }: RemoveProps<T>) => {
 
   const results: number[] = [];
 
-  while (index++ < length) {
+  while (++index < length) {
     if (predicate({ array, value: array[index], index })) {
       results.push(index);
     }
