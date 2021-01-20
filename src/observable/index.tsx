@@ -190,6 +190,8 @@ class _Observable<T> implements Observable<T> {
   add: Handler<Nullable<T>, void> = (data) => {
     this._isAlreadyClosed();
 
+    if (this._value === data) return;
+
     this._value = data;
 
     setTimeout(() => {
