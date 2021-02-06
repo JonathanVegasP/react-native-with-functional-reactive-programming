@@ -163,6 +163,8 @@ class _ObservableContext {
 
 const _context = new _ObservableContext();
 
+let events: Nullable<Handler[]>;
+
 class _Observable<T> implements Observable<T> {
   private _subscriptions: Nullable<_Subscription<Nullable<T>>[]> = [];
   private _value: Nullable<T>;
@@ -194,7 +196,7 @@ class _Observable<T> implements Observable<T> {
 
     this._value = data;
 
-    setTimeout(() => {
+    const event = () =>
       forEach({
         array: this._subscriptions!,
         predicate: ({ value }) => {
@@ -207,13 +209,24 @@ class _Observable<T> implements Observable<T> {
           }
         },
       });
-    }, 0);
+
+    if (events == null) {
+      events = [event];
+
+      setTimeout(() => {
+        forEach({ array: events!, predicate: ({ value }) => value() });
+
+        events = null;
+      }, 0);
+    } else {
+      events.push(event);
+    }
   };
 
   addError: Handler<unknown, void> = (error) => {
     this._isAlreadyClosed();
 
-    setTimeout(() => {
+    const event = () =>
       forEach({
         array: this._subscriptions!,
         predicate: ({ value }) => {
@@ -222,7 +235,21 @@ class _Observable<T> implements Observable<T> {
           value.triggerError(error);
         },
       });
-    }, 0);
+
+    if (events == null) {
+      events = [event];
+
+      setTimeout(() => {
+        forEach({
+          array: events!,
+          predicate: ({ value }) => value(),
+        });
+
+        events = null;
+      }, 0);
+    } else {
+      events.push(event);
+    }
   };
 
   listen: Handler<
@@ -259,7 +286,7 @@ class _Observable<T> implements Observable<T> {
     this._isClosed = true;
 
     return new Promise((resolve) => {
-      setTimeout(() => {
+      const event = () => {
         forEach({
           array: this._subscriptions!,
           predicate: ({ value }) => value.triggerDone(),
@@ -269,7 +296,19 @@ class _Observable<T> implements Observable<T> {
         this._value = null;
 
         resolve();
-      }, 0);
+      };
+
+      if (events == null) {
+        events = [event];
+
+        setTimeout(() => {
+          forEach({ array: events!, predicate: ({ value }) => value() });
+
+          events = null;
+        }, 0);
+      } else {
+        events.push(event);
+      }
     });
   };
 
@@ -328,7 +367,15 @@ class _MergedObservable<T = unknown> implements Observable<T> {
   }
 
   get isClosed(): boolean {
-    throw new Error('Method not implemented.');
+    let result = false;
+    forEach({
+      array: this._observables,
+      predicate: ({ value }) => {
+        result = value.isClosed;
+        if (result) return false;
+      },
+    });
+    return result;
   }
 
   close: Handler<void, Promise<void>> = () =>
@@ -379,25 +426,22 @@ const Obx: FC<ObxProps> = React.memo(
   (prev, actual) => prev.children === actual.children,
 );
 
-const runAndListen = <T,>(fn: Handler<T | null>) => {
+const reactiveListener = <T,>(fn: Handler) => {
   _context.track();
-  fn(null);
-  const subs = _context.unTrack().listen({ onData: fn as Handler<unknown> });
+  fn();
 
-  const dispose = () => subs.cancel();
-
-  return dispose;
+  return _context.unTrack().listen({ onData: fn as Handler<unknown> });
 };
 
 const ContextFactory: ContextFactoryHandler = (initialState, actions) => {
   const obs = ObservableFactory(initialState);
 
   const useContext = (listen = true) => {
-    if (!listen) {
-      return (obs as any)._value;
-    }
-
     const { _value } = obs as any;
+
+    if (!listen) {
+      return _value;
+    }
 
     const [state, setState] = useState(_value);
 
@@ -414,9 +458,13 @@ const ContextFactory: ContextFactoryHandler = (initialState, actions) => {
 
   for (let k in actions) {
     newActions[k] = actions[k]({
-      setState: (fn) => {
-        const { _value } = obs as any;
-        obs.add(fn(_value));
+      setState: (fn: any) => {
+        if (fn instanceof Function || typeof fn === 'function') {
+          const { _value } = obs as any;
+          obs.add(fn(_value));
+        } else {
+          obs.add(fn);
+        }
       },
     });
   }
@@ -431,6 +479,6 @@ export {
   useMethodExtensions,
   useObservable,
   Obx,
-  runAndListen,
+  reactiveListener,
   ContextFactory,
 };

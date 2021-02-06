@@ -18,10 +18,9 @@ const initialState = { color: '#000', backgroundColor: '#fff' };
 const revertStyle = ({
   setState,
 }: ContextActionsProps<typeof initialState>) => () => {
-  setState((state) => ({
-    color: state.backgroundColor,
-    backgroundColor: state.color,
-  }));
+  setState((state) => {
+    return { backgroundColor: state.color, color: state.backgroundColor };
+  });
 };
 
 const { useContext, useContextActions } = ContextFactory(initialState, {
@@ -31,8 +30,6 @@ const { useContext, useContextActions } = ContextFactory(initialState, {
 const RevertStyleComponent = () => {
   const { color, backgroundColor } = useContext();
   const { revertStyle } = useContextActions();
-
-  console.log('this component should be rendered only when pressed');
 
   return (
     <TouchableWithoutFeedback onPress={revertStyle}>
@@ -47,11 +44,6 @@ const CounterComponent = ({ counter }: { counter: Observable<number> }) => {
   const increment = useCallback(() => {
     counter.value!++;
   }, []);
-
-  console.log(
-    'This component should be rendered as the button is pressed like',
-    counter.value,
-  );
 
   return (
     <TouchableWithoutFeedback onPress={increment}>
@@ -70,8 +62,6 @@ const App = () => {
     counter.value;
     return <CounterComponent counter={counter} />;
   }, []);
-
-  console.log('this should not be rendered more than one time');
 
   return (
     <>
