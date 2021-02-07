@@ -1,7 +1,6 @@
-import React, { FC, useEffect, useMemo, useState } from 'react';
+import React, { FC, useEffect, useMemo, useRef, useState } from 'react';
 import { forEach } from '../utils/forEach';
 import { map } from '../utils/map';
-import { remove } from '../utils/remove';
 import { ObservableException } from './exceptions/observableException';
 import { ListenProps } from './interfaces/listenProps';
 import { Observable } from './interfaces/observable';
@@ -36,13 +35,29 @@ class _Subscription<T> implements Subscription<T> {
 
   triggerError = (error: unknown) => this._onError?.call(this, error);
 
-  triggerDone = () => {
-    this._onDone?.call(this);
+  triggerDone = (cancel = false) => {
+    const event = () => {
+      this._onDone?.call(this);
 
-    this._subscriptions = null;
-    this._onData = null;
-    this._onError = null;
-    this._onDone = null;
+      this._subscriptions = null;
+      this._onData = null;
+      this._onError = null;
+      this._onDone = null;
+    };
+    if (cancel) {
+      if (events == null) {
+        events = [event];
+        setTimeout(() => {
+          forEach({ array: events!, predicate: ({ value }) => value() });
+
+          events = null;
+        }, 0);
+      } else {
+        events.push(event);
+      }
+    } else {
+      event();
+    }
   };
 
   onData: Handler<Nullable<OnData<T>>, void> = (handler) =>
@@ -63,12 +78,9 @@ class _Subscription<T> implements Subscription<T> {
   resume: Handler<void, void> = () => (this._isPaused = false);
 
   cancel: Handler<void, void> = () => {
-    remove({
-      array: this._subscriptions!,
-      predicate: ({ value }) => value === this,
-    });
+    this._subscriptions!.splice(this._subscriptions!.indexOf(this), 1);
 
-    this.triggerDone();
+    this.triggerDone(true);
   };
 }
 
@@ -402,8 +414,15 @@ const useMethodExtensions = () => {
   });
 };
 
-const useObservable: UseObservableHandler = (initialValue) =>
-  useMemo(() => ObservableFactory(initialValue), []);
+const useObservable: UseObservableHandler = (initialValue) => {
+  const obs = useRef<Observable<any>>();
+
+  if (obs.current == null) {
+    obs.current = ObservableFactory(initialValue);
+  }
+
+  return obs.current!;
+};
 
 const Obx: FC<ObxProps> = React.memo(
   ({ children }) => {
@@ -430,7 +449,7 @@ const reactiveListener = <T,>(fn: Handler) => {
   _context.track();
   fn();
 
-  return _context.unTrack().listen({ onData: fn as Handler<unknown> });
+  return _context.unTrack().listen({});
 };
 
 const ContextFactory: ContextFactoryHandler = (initialState, actions) => {
